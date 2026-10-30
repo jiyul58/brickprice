@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>브릭시세 · 레고 품번 시세 조회</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  /* ============================================================
+     Liquid Glass · 브릭시세
+     레이어 규칙: 배경(.bg, z-index:-1) → 콘텐츠(기본 흐름). 
+     그 외의 z-index / position:absolute 오버레이는 사용하지 않아요.
+     블러(backdrop-filter)는 큰 패널에만 쓰고, 패널 안쪽 타일은
+     블러 없이 반투명 채움만 써서 겹침(중첩 블러)을 없앴어요.
+     ============================================================ */
+  :root{
+    --ink:#14213D;
+    --ink-soft:#4A5878;
+    --ink-mute:#7C88A3;
+    --accent:#E5304A;
+    --accent-deep:#C9203A;
+    --amber:#F2A33A;
+    --amber-ink:#9A6410;
+    --teal:#13A585;
+    --teal-ink:#0C8068;
+
+    --glass-fill:rgba(255,255,255,.34);
+    --glass-fill-strong:rgba(255,255,255,.55);
+    --tile-fill:rgba(255,255,255,.4);
+    --glass-edge:rgba(255,255,255,.7);
+    --glass-blur:blur(26px) saturate(170%);
+    --shadow-glass:0 12px 36px rgba(38,56,110,.14), 0 2px 6px rgba(38,56,110,.06);
+    --highlight:inset 0 1px 0 rgba(255,255,255,.95), inset 0 -1px 0 rgba(255,255,255,.28), inset 1px 0 0 rgba(255,255,255,.4), inset -1px 0 0 rgba(255,255,255,.2);
+
+    --r-lg:28px;
+    --r-md:20px;
+    --r-sm:16px;
+
+    --font-sans:'Plus Jakarta Sans','Noto Sans KR',system-ui,-apple-system,sans-serif;
+  }
+  *{ box-sizing:border-box; }
+  html{ scroll-behavior:smooth; }
+  body{
+    margin:0;
+    min-height:100vh;
+    color:var(--ink);
+    background:#E6ECF8;
+    font-family:var(--font-sans);
+    -webkit-font-smoothing:antialiased;
+    word-break:keep-all;
+    isolation:isolate;
+  }
+  button, input{ font-family:inherit; }
+
+  /* ---------- 배경 (유일한 고정 레이어) ---------- */
+  .bg{
+    position:fixed; inset:0; z-index:-1; pointer-events:none;
+    background:
+      radial-gradient(38% 34% at 12% 14%, rgba(122,167,255,.78), transparent 70%),
+      radial-gradient(36% 32% at 90% 10%, rgba(255,157,181,.68), transparent 70%),
+      radial-gradient(42% 38% at 82% 88%, rgba(183,155,255,.62), transparent 70%),
+      radial-gradient(38% 36% at 8% 90%, rgba(143,227,208,.62), transparent 70%),
+      radial-gradient(28% 26% at 52% 48%, rgba(255,214,150,.5), transparent 70%),
+      linear-gradient(160deg, #E8EEFB, #F3EEFB 50%, #EAF6F3);
+    background-size:130% 130%;
+    background-position:0% 0%;
+    animation:drift 32s ease-in-out infinite alternate;
+  }
+  @keyframes drift{ to{ background-position:100% 100%; } }
+
+  /* ---------- 글라스 패널 (블러 허용: 큰 패널만) ---------- */
+  .search-pill, .mini-pill, .result, .empty, .segmented{
+    background:var(--glass-fill);
+    -webkit-backdrop-filter:var(--glass-blur);
+    backdrop-filter:var(--glass-blur);
+    border:1px solid var(--glass-edge);
+    box-shadow:var(--shadow-glass), var(--highlight);
+  }
+  /* ---------- 타일 (패널 안쪽/작은 요소: 블러 없음) ---------- */
+  .landing-top, .chip, .recent-chip, .pbox, .insight-box, .chart-box{
+    background:var(--tile-fill);
+    border:1px solid rgba(255,255,255,.62);
+    box-shadow:var(--highlight);
+  }
+
+  /* ---------- Landing ---------- */
+  .landing{
+    min-height:100vh; min-height:100dvh;
+    display:flex; flex-direction:column; align-items:center;
+    padding:7vh 20px 32px;
+  }
+  .landing.hide{ display:none; }
+  .landing-top{
+    display:inline-flex; align-items:center; gap:8px;
+    padding:8px 16px; border-radius:999px;
+    font-size:13px; font-weight:600; color:var(--ink-soft);
+  }
+  .landing-top::before{
+    content:""; width:8px; height:8px; border-radius:50%; flex-shrink:0;
+    background:linear-gradient(135deg,#FF6B83,var(--accent));
+  }
+  .landing-center{
+    flex:1; width:100%; max-width:560px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:24px;
+  }
+  .landing-logo{
+    font-size:clamp(44px,13vw,68px); font-weight:800; line-height:1.1;
+    letter-spacing:-0.03em; text-align:center;
+  }
+  .brand-accent{
+    background:linear-gradient(135deg,#FF5A74,#E5304A 55%,#FF8A5B);
+    -webkit-background-clip:text; background-clip:text;
+    -webkit-text-fill-color:transparent; color:transparent;
+  }
+  .landing-sub{
+    margin:-8px 0 0; max-width:38ch; text-align:center;
+    font-size:15px; line-height:1.65; color:var(--ink-soft);
+  }
+
+  .search-pill{
+    width:100%; display:flex; align-items:center; gap:10px;
+    padding:6px 6px 6px 22px; border-radius:999px;
+    transition:box-shadow .2s ease, border-color .2s ease;
+  }
+  .search-pill:focus-within{
+    border-color:rgba(255,255,255,.98);
+    box-shadow:var(--shadow-glass), var(--highlight), 0 0 0 4px rgba(229,48,74,.14);
+  }
+  .search-pill input[type="text"]{
+    flex:1; min-width:0; border:none; outline:none; background:transparent;
+    font-size:17px; font-weight:500; color:var(--ink); padding:12px 0;
+  }
+  .search-pill input::placeholder, .mini-pill input::placeholder{ color:var(--ink-mute); font-weight:400; }
+
+  .btn-accent, .search-pill button, .mini-pill button{
+    border:none; cursor:pointer; color:#fff; font-weight:700; flex-shrink:0;
+    background:linear-gradient(135deg,#FF5A74,#E5304A);
+    box-shadow:0 6px 16px rgba(229,48,74,.32), inset 0 1px 0 rgba(255,255,255,.45);
+    transition:transform .15s ease, box-shadow .15s ease, filter .15s ease;
+  }
+  .search-pill button{ padding:13px 26px; border-radius:999px; font-size:14px; }
+  .mini-pill button{ padding:9px 18px; border-radius:999px; font-size:13px; }
+  .search-pill button:hover, .mini-pill button:hover{ filter:brightness(1.05); transform:translateY(-1px); }
+  .search-pill button:active, .mini-pill button:active{ transform:scale(.97); }
+  .search-pill button:focus-visible, .mini-pill button:focus-visible{ outline:3px solid rgba(242,163,58,.6); outline-offset:2px; }
+
+  .landing-chips{ display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
+  .chip, .recent-chip{
+    padding:8px 14px; border-radius:999px; cursor:pointer;
+    font-size:13px; font-weight:600; color:var(--ink);
+    transition:background .15s ease, transform .15s ease;
+  }
+  .chip:hover, .recent-chip:hover{ background:var(--glass-fill-strong); transform:translateY(-1px); }
+
+  .landing-foot{ font-size:12px; color:var(--ink-mute); text-align:center; }
+
+  /* ---------- App ---------- */
+  .app.hide{ display:none; }
+  .wrap{ max-width:720px; margin:0 auto; padding:20px 20px 80px; }
+
+  .app-header{ display:flex; align-items:center; gap:14px; }
+  .brand-btn{
+    background:none; border:none; padding:0; cursor:pointer; flex-shrink:0;
+    font-size:20px; font-weight:800; letter-spacing:-0.02em; color:var(--ink);
+  }
+  .mini-pill{
+    flex:1; min-width:0; display:flex; align-items:center; gap:8px;
+    padding:4px 5px 4px 18px; border-radius:999px;
+  }
+  .mini-pill input[type="text"]{
+    flex:1; min-width:0; border:none; outline:none; background:transparent;
+    font-size:15px; font-weight:500; color:var(--ink); padding:9px 0;
+  }
+
+  .toolbar{ display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin:18px 0 6px; }
+  .segmented{ display:inline-flex; gap:2px; padding:4px; border-radius:999px; }
+  .segmented button{
+    padding:7px 14px; border:none; border-radius:999px; cursor:pointer;
+    background:transparent; color:var(--ink-soft); font-size:13px; font-weight:600;
+    transition:background .18s ease, color .18s ease, box-shadow .18s ease;
+  }
+  .segmented button.active{
+    background:rgba(255,255,255,.96); color:var(--ink);
+    box-shadow:0 2px 8px rgba(38,56,110,.16);
+  }
+  .segmented button:focus-visible{ outline:2px solid rgba(242,163,58,.8); outline-offset:1px; }
+  .toolbar .segmented:last-child{ margin-left:auto; }
+  .cond-hint{ margin:6px 4px 14px; font-size:12px; color:var(--ink-mute); text-align:right; }
+
+  .recent{ margin:18px 0 0; }
+  .recent.hide{ display:none; }
+  .recent-label{ margin-bottom:8px; font-size:12px; font-weight:600; color:var(--ink-mute); }
+  .recent-list{ display:flex; flex-wrap:wrap; gap:8px; }
+
+  /* ---------- 결과 패널 ---------- */
+  .result{ display:none; margin-top:18px; padding:26px 22px; border-radius:var(--r-lg); }
+  .result.show{ display:block; animation:rise .4s ease; }
+  @keyframes rise{ from{ opacity:0; transform:translateY(10px); } to{ opacity:1; transform:none; } }
+
+  .result-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:14px; }
+  .setnum{ font-size:12px; font-weight:700; letter-spacing:.04em; color:var(--accent); }
+  .setname{ margin-top:4px; font-size:26px; font-weight:800; line-height:1.2; letter-spacing:-0.02em; }
+  .settheme{ margin-top:4px; font-size:13px; color:var(--ink-soft); }
+  .brick{ flex-shrink:0; display:block; }
+
+  .prices{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:22px; }
+  .pbox{ padding:14px 4px; border-radius:var(--r-sm); text-align:center; min-width:0; }
+  .plabel{ font-size:12px; font-weight:600; color:var(--ink-mute); }
+  .pval{
+    margin-top:6px; white-space:nowrap; font-weight:700;
+    font-size:clamp(11.5px,3.3vw,16px); font-variant-numeric:tabular-nums; letter-spacing:-0.02em;
+  }
+  .pbox.low .pval{ color:var(--teal-ink); }
+  .pbox.high .pval{ color:var(--accent-deep); }
+  .pbox.avg{
+    background:linear-gradient(145deg, rgba(20,33,61,.94), rgba(46,64,112,.9));
+    border-color:rgba(255,255,255,.18);
+    box-shadow:0 10px 24px rgba(20,33,61,.28), inset 0 1px 0 rgba(255,255,255,.25);
+  }
+  .pbox.avg .plabel{ color:rgba(255,255,255,.72); }
+  .pbox.avg .pval{ color:#fff; font-size:clamp(12px,3.5vw,17px); }
+
+  .insights{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
+  .insight-box{ padding:14px; border-radius:var(--r-sm); }
+  .insight-label{ font-size:12px; font-weight:600; color:var(--ink-mute); }
+  .stars{ display:flex; gap:5px; margin-top:10px; }
+  .star{ width:14px; height:14px; border-radius:50%; background:rgba(20,33,61,.1); flex-shrink:0; }
+  .star.filled{ background:linear-gradient(180deg,#FFD08A,var(--amber)); }
+  .rec-text{ margin-top:8px; font-size:14px; font-weight:700; }
+  .rec-text.buy{ color:var(--teal-ink); }
+  .rec-text.hold{ color:var(--amber-ink); }
+  .rec-text.avoid{ color:var(--accent-deep); }
+  .rec-sub{ margin-top:4px; font-size:11.5px; line-height:1.45; color:var(--ink-mute); }
+
+  .status-pill{
+    display:inline-flex; align-items:center; gap:7px; margin-top:10px;
+    padding:6px 12px; border-radius:999px; font-size:13px; font-weight:700;
+  }
+  .status-pill::before{ content:""; width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .status-pill.active{ background:rgba(19,165,133,.14); color:var(--teal-ink); }
+  .status-pill.active::before{ background:var(--teal); }
+  .status-pill.retired{ background:rgba(229,48,74,.12); color:var(--accent-deep); }
+  .status-pill.retired::before{ background:var(--accent); }
+
+  /* ---------- 차트 ---------- */
+  .chart-section{ margin-top:22px; }
+  .chart-head{ display:flex; justify-content:space-between; align-items:baseline; gap:10px; margin-bottom:10px; }
+  .chart-title{ font-size:12px; font-weight:600; color:var(--ink-mute); }
+  .chart-legend{ display:flex; gap:14px; }
+  .legend-item{ display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--ink-soft); }
+  .legend-swatch{ width:16px; height:0; border-top:3px solid var(--ink); border-radius:2px; }
+  .legend-swatch.retail{ border-top:2px dashed var(--amber); }
+  .chart-box{ padding:12px 10px 6px; border-radius:var(--r-sm); }
+  .chart-box svg{ display:block; width:100%; height:auto; }
+  .chart-months{ display:flex; justify-content:space-between; padding:6px 4px 0; font-size:11px; color:var(--ink-mute); }
+
+  /* ---------- 가격대 게이지 (겹침 없이 grid로 배치) ---------- */
+  .gauge{ margin-top:22px; }
+  .gauge-label{ margin-bottom:10px; font-size:12px; font-weight:600; color:var(--ink-mute); }
+  .studs{ display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:5px; align-items:end; }
+  .marker{ grid-row:1; display:flex; justify-content:center; min-width:0; margin-bottom:8px; }
+  .marker span{
+    flex-shrink:0; padding:3px 9px; border-radius:999px; white-space:nowrap;
+    background:rgba(255,255,255,.9); color:var(--ink);
+    font-size:11px; font-weight:700; box-shadow:0 2px 8px rgba(38,56,110,.14);
+  }
+  .stud{ grid-row:2; display:flex; flex-direction:column; align-items:center; gap:3px; }
+  .stud i{ display:block; width:10px; height:6px; border-radius:50%; background:rgba(20,33,61,.12); }
+  .stud b{ display:block; width:100%; height:20px; border-radius:8px; background:rgba(20,33,61,.08); }
+  .stud.filled i{ background:#FFC468; }
+  .stud.filled b{ background:linear-gradient(180deg,#FFD08A,var(--amber)); }
+
+  .note{
+    margin-top:22px; padding-top:16px;
+    border-top:1px solid rgba(20,33,61,.1);
+    font-size:12.5px; line-height:1.65; color:var(--ink-soft);
+  }
+  .note b{ color:var(--accent-deep); font-weight:700; }
+
+  .empty{ display:none; margin-top:18px; padding:30px 20px; border-radius:var(--r-lg); text-align:center; font-size:14px; color:var(--ink-soft); }
+  .empty.show{ display:block; }
+  .empty .en{ margin-top:6px; font-size:12px; color:var(--ink-mute); }
+
+  footer{ margin-top:48px; padding-top:18px; border-top:1px solid rgba(20,33,61,.08); font-size:12px; color:var(--ink-mute); text-align:center; }
+
+  /* ---------- 접근성 / 호환성 ---------- */
+  @supports not ((-webkit-backdrop-filter:none) or (backdrop-filter:none)){
+    .search-pill, .mini-pill, .result, .empty, .segmented{ background:rgba(255,255,255,.82); }
+  }
+  @media (prefers-reduced-transparency: reduce){
+    .search-pill, .mini-pill, .result, .empty, .segmented{
+      background:rgba(255,255,255,.92); -webkit-backdrop-filter:none; backdrop-filter:none;
+    }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .bg, .result.show{ animation:none; }
+    .chip, .recent-chip, .btn-accent, .search-pill button, .mini-pill button{ transition:none; }
+  }
+</style>
+</head>
+<body>
+<div class="bg" aria-hidden="true"></div>
+
+<div class="landing" id="landing">
+  <div class="landing-top">어서오세요!</div>
+  <div class="landing-center">
+    <div class="landing-logo">브릭<span class="brand-accent">시세</span></div>
+    <p class="landing-sub">레고 세트 품번을 입력하면 중고 시장의 최고가·평균가·최저가를 보여드려요</p>
+    <form class="search-pill" id="landing-form">
+      <input type="text" id="q-landing" placeholder="품번 또는 세트명 입력" autocomplete="off" autofocus>
+      <button type="submit">조회</button>
+    </form>
+    <div class="landing-chips" id="landing-chips"></div>
+  </div>
+  <div class="landing-foot">DEMO · SAMPLE DATA · NOT LIVE</div>
+</div>
+
+<div class="app hide" id="app">
+<div class="wrap">
+
+  <div class="app-header">
+    <button class="brand-btn" id="brand-home">브릭<span class="brand-accent">시세</span></button>
+    <form class="mini-pill" id="mini-form">
+      <input type="text" id="q" placeholder="품번 또는 세트명" autocomplete="off">
+      <button type="submit">조회</button>
+    </form>
+  </div>
+
+  <div class="toolbar">
+    <div class="segmented" role="group" aria-label="상품 상태 선택">
+      <button type="button" id="cond-used" class="active">개봉(중고)</button>
+      <button type="button" id="cond-new">미개봉(MISB)</button>
+    </div>
+    <div class="segmented" role="group" aria-label="통화 단위 선택">
+      <button type="button" id="cur-krw" class="active">₩ KRW</button>
+      <button type="button" id="cur-usd">$ USD</button>
+    </div>
+  </div>
+  <div class="cond-hint" id="cond-hint">중고(개봉) 제품 시세를 보고 있어요</div>
+
+  <div class="result" id="result">
+    <div class="result-top">
+      <div>
+        <div class="setnum" id="r-num">#75192</div>
+        <div class="setname" id="r-name">MILLENNIUM FALCON</div>
+        <div class="settheme" id="r-theme">Star Wars UCS</div>
+      </div>
+      <svg class="brick" width="46" height="36" viewBox="0 0 46 36" aria-hidden="true">
+        <defs><linearGradient id="brickFill" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF6B83"/><stop offset="1" stop-color="#E5304A"/></linearGradient></defs>
+        <rect x="3" y="12" width="40" height="22" rx="5" fill="url(#brickFill)"/>
+        <rect x="7" y="5" width="9" height="8" rx="3" fill="url(#brickFill)"/>
+        <rect x="18.5" y="5" width="9" height="8" rx="3" fill="url(#brickFill)"/>
+        <rect x="30" y="5" width="9" height="8" rx="3" fill="url(#brickFill)"/>
+      </svg>
+    </div>
+
+    <div class="prices">
+      <div class="pbox low">
+        <div class="plabel">최저가</div>
+        <div class="pval" id="r-low">-</div>
+      </div>
+      <div class="pbox avg">
+        <div class="plabel">평균가</div>
+        <div class="pval" id="r-avg">-</div>
+      </div>
+      <div class="pbox high">
+        <div class="plabel">최고가</div>
+        <div class="pval" id="r-high">-</div>
+      </div>
+    </div>
+
+    <div class="insights">
+      <div class="insight-box">
+        <div class="insight-label">구매 추천도</div>
+        <div class="stars" id="r-stars"></div>
+        <div class="rec-text" id="r-rec-text">-</div>
+        <div class="rec-sub" id="r-rec-sub"></div>
+      </div>
+      <div class="insight-box">
+        <div class="insight-label">단종여부</div>
+        <div id="r-status"></div>
+      </div>
+    </div>
+
+    <div class="chart-section">
+      <div class="chart-head">
+        <div class="chart-title">12개월 시세 추이</div>
+        <div class="chart-legend">
+          <div class="legend-item"><span class="legend-swatch line"></span>시세</div>
+          <div class="legend-item"><span class="legend-swatch retail"></span>발매가</div>
+        </div>
+      </div>
+      <div class="chart-box">
+        <svg id="chart" viewBox="0 0 320 130"></svg>
+      </div>
+      <div class="chart-months"><span>12개월 전</span><span>현재</span></div>
+    </div>
+
+    <div class="gauge">
+      <div class="gauge-label">가격대 게이지 (최저 → 최고)</div>
+      <div class="studs" id="studs"></div>
+    </div>
+
+    <div class="note">이 결과는 <b>샘플 데이터</b>입니다. 추천도는 오늘 최저가가 평균가보다 <b>15% 이상</b> 저렴하면 매수, <b>30% 이상</b> 저렴하면 적극 매수로 계산돼요. 실제 시세를 연동하려면 브릭링크(BrickLink) API 키가 필요해요.</div>
+  </div>
+
+  <div class="empty" id="empty">
+    일치하는 세트를 찾지 못했어요.
+    <div class="en">등록된 샘플 세트만 검색할 수 있어요</div>
+  </div>
+
+  <div class="recent hide" id="recent">
+    <div class="recent-label">최근 검색</div>
+    <div class="recent-list" id="recent-list"></div>
+  </div>
+
+  <footer>브릭시세 · SAMPLE PROTOTYPE · NOT LIVE DATA</footer>
+</div>
+</div>
+
+<script>
+const DATA = [
+  { num:"75192", name:"Millennium Falcon", theme:"Star Wars · UCS", discontinued:true, retail:770000,
+    used:{ low:920000, avg:1180000, high:1450000 }, new:{ low:1400000, avg:1750000, high:2100000 } },
+  { num:"10281", name:"Bonsai Tree", theme:"Botanical Collection", discontinued:false, retail:55000,
+    used:{ low:38000, avg:49000, high:65000 }, new:{ low:50000, avg:60000, high:75000 } },
+  { num:"21318", name:"Tree House", theme:"Ideas", discontinued:true, retail:220000,
+    used:{ low:175000, avg:265000, high:340000 }, new:{ low:320000, avg:420000, high:520000 } },
+  { num:"42115", name:"Lamborghini Sián", theme:"Technic", discontinued:true, retail:380000,
+    used:{ low:480000, avg:560000, high:690000 }, new:{ low:750000, avg:880000, high:1050000 } },
+  { num:"10294", name:"Titanic", theme:"Icons", discontinued:false, retail:590000,
+    used:{ low:615000, avg:640000, high:780000 }, new:{ low:680000, avg:720000, high:850000 } },
+  { num:"71043", name:"Hogwarts Castle", theme:"Harry Potter", discontinued:false, retail:470000,
+    used:{ low:410000, avg:520000, high:670000 }, new:{ low:500000, avg:600000, high:750000 } },
+  { num:"10276", name:"Colosseum", theme:"Icons", discontinued:true, retail:330000,
+    used:{ low:390000, avg:470000, high:590000 }, new:{ low:580000, avg:680000, high:820000 } },
+  { num:"75252", name:"Imperial Star Destroyer", theme:"Star Wars · UCS", discontinued:true, retail:750000,
+    used:{ low:650000, avg:790000, high:980000 }, new:{ low:980000, avg:1150000, high:1380000 } },
+];
+
+const won = n => "₩" + n.toLocaleString("ko-KR");
+const usdRate = 1400; // 참고용 환율, 실제 API 연동 시 실시간 값으로 교체 예정
+const dollar = n => "$" + Math.round(n / usdRate).toLocaleString("en-US");
+
+let currency = "KRW";
+let condition = "used"; // "used"=개봉/중고, "new"=미개봉(MISB)
+let current = null;
+let recentSearches = [];
+
+const formatMoney = n => currency === "KRW" ? won(n) : dollar(n);
+const priceOf = found => found[condition];
+
+const curKrwBtn = document.getElementById("cur-krw");
+const curUsdBtn = document.getElementById("cur-usd");
+curKrwBtn.addEventListener("click", () => setCurrency("KRW"));
+curUsdBtn.addEventListener("click", () => setCurrency("USD"));
+
+const condUsedBtn = document.getElementById("cond-used");
+const condNewBtn = document.getElementById("cond-new");
+condUsedBtn.addEventListener("click", () => setCondition("used"));
+condNewBtn.addEventListener("click", () => setCondition("new"));
+
+function setCurrency(next){
+  currency = next;
+  curKrwBtn.classList.toggle("active", currency === "KRW");
+  curUsdBtn.classList.toggle("active", currency === "USD");
+  if(current) renderResult(current);
+}
+
+function setCondition(next){
+  condition = next;
+  condUsedBtn.classList.toggle("active", condition === "used");
+  condNewBtn.classList.toggle("active", condition === "new");
+  document.getElementById("cond-hint").textContent = condition === "used"
+    ? "중고(개봉) 제품 시세를 보고 있어요"
+    : "미개봉(MISB) 제품 시세를 보고 있어요";
+  if(current) renderResult(current);
+}
+
+function addToRecent(setNum){
+  recentSearches = recentSearches.filter(n => n !== setNum);
+  recentSearches.unshift(setNum);
+  recentSearches = recentSearches.slice(0, 5);
+  renderRecent();
+}
+
+function renderRecent(){
+  const wrap = document.getElementById("recent");
+  const list = document.getElementById("recent-list");
+  if(recentSearches.length === 0){ wrap.classList.add("hide"); return; }
+  wrap.classList.remove("hide");
+  list.innerHTML = "";
+  recentSearches.forEach(num => {
+    const d = DATA.find(x => x.num === num);
+    const b = document.createElement("button");
+    b.className = "recent-chip";
+    b.textContent = (d ? d.num + " · " + d.name : num);
+    b.onclick = () => { document.getElementById("q").value = num; runSearch(); };
+    list.appendChild(b);
+  });
+}
+
+function fillChips(el){
+  DATA.slice(0,4).forEach(d=>{
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "chip";
+    b.textContent = d.num;
+    b.onclick = () => {
+      document.getElementById("q-landing").value = d.num;
+      enterApp(d.num);
+    };
+    el.appendChild(b);
+  });
+}
+fillChips(document.getElementById("landing-chips"));
+
+function renderResult(found){
+  const p = priceOf(found);
+  document.getElementById("r-num").textContent = "#" + found.num;
+  document.getElementById("r-name").textContent = found.name;
+  document.getElementById("r-theme").textContent = found.theme;
+  document.getElementById("r-low").textContent = formatMoney(p.low);
+  document.getElementById("r-avg").textContent = formatMoney(p.avg);
+  document.getElementById("r-high").textContent = formatMoney(p.high);
+  buildGauge(p.low, p.avg, p.high);
+  buildStars(found);
+  buildStatus(found.discontinued);
+  buildChart(found);
+  document.getElementById("result").classList.add("show");
+}
+
+// 오늘 최저가가 평균가 대비 얼마나 저렴한지로 추천도를 계산
+// 30% 이상 저렴 → 적극 매수 / 15% 이상 저렴 → 매수 추천
+function getRecommendation(found){
+  const p = priceOf(found);
+  const discountPct = ((p.avg - p.low) / p.avg) * 100;
+  let score, text, cls;
+  if(discountPct >= 30){ score=5; text="적극 매수"; cls="buy"; }
+  else if(discountPct >= 15){ score=4; text="매수 추천"; cls="buy"; }
+  else if(discountPct >= 5){ score=3; text="보통"; cls="hold"; }
+  else if(discountPct >= 0){ score=2; text="관망"; cls="hold"; }
+  else { score=1; text="비추천"; cls="avoid"; }
+  return { score, text, cls, discountPct };
+}
+
+function buildStars(found){
+  const rec = getRecommendation(found);
+  const wrap = document.getElementById("r-stars");
+  wrap.innerHTML = "";
+  for(let i=1;i<=5;i++){
+    const s = document.createElement("div");
+    s.className = "star" + (i<=rec.score ? " filled" : "");
+    wrap.appendChild(s);
+  }
+  const label = document.getElementById("r-rec-text");
+  label.textContent = rec.text;
+  label.className = "rec-text " + rec.cls;
+  const sub = document.getElementById("r-rec-sub");
+  const roundedPct = Math.round(rec.discountPct);
+  sub.textContent = roundedPct >= 0
+    ? "오늘 최저가가 평균가보다 " + roundedPct + "% 저렴해요"
+    : "오늘 최저가가 평균가보다 " + Math.abs(roundedPct) + "% 비싸요";
+}
+
+// 세트 품번을 시드로 사용하는 결정론적 의사난수(항상 같은 결과)
+function seededRandom(seedStr){
+  let h = 0;
+  for(let i=0;i<seedStr.length;i++){ h = Math.imul(31, h) + seedStr.charCodeAt(i) | 0; }
+  return function(){
+    h = Math.imul(h ^ (h >>> 15), 1 | h);
+    h = (h + Math.imul(h ^ (h >>> 7), 61 | h)) ^ h;
+    return ((h ^ (h >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function generateHistory(found){
+  const p = priceOf(found);
+  const rand = seededRandom(found.num + "_" + condition);
+  const points = 12;
+  const history = [];
+  for(let i=0;i<points;i++){
+    const t = i/(points-1); // 0 → 1
+    const base = found.retail + (p.avg - found.retail) * t; // 발매가 → 평균가로 서서히 이동
+    const noise = (rand() - 0.5) * (p.high - p.low) * 0.14;
+    let v = base + noise;
+    v = Math.max(p.low * 0.92, Math.min(p.high * 1.04, v));
+    history.push(Math.round(v));
+  }
+  history[points-1] = p.avg; // 마지막 지점은 현재 평균가로 고정
+  return history;
+}
+
+function buildChart(found){
+  const svg = document.getElementById("chart");
+  svg.innerHTML = "";
+  const W = 320, H = 130, PAD_L = 6, PAD_R = 6, PAD_T = 14, PAD_B = 10;
+
+  const history = generateHistory(found);
+  const allVals = history.concat([found.retail]);
+  const min = Math.min(...allVals) * 0.97;
+  const max = Math.max(...allVals) * 1.03;
+
+  const x = i => PAD_L + (i/(history.length-1)) * (W - PAD_L - PAD_R);
+  const y = v => PAD_T + (1 - (v-min)/(max-min)) * (H - PAD_T - PAD_B);
+
+  const ns = "http://www.w3.org/2000/svg";
+
+  // 발매가 기준선
+  const retailY = y(found.retail);
+  const dash = document.createElementNS(ns, "line");
+  dash.setAttribute("x1", PAD_L); dash.setAttribute("x2", W-PAD_R);
+  dash.setAttribute("y1", retailY); dash.setAttribute("y2", retailY);
+  dash.setAttribute("stroke", "#F2A33A");
+  dash.setAttribute("stroke-width", "1.6");
+  dash.setAttribute("stroke-dasharray", "4 3");
+  svg.appendChild(dash);
+
+  const dashLabel = document.createElementNS(ns, "text");
+  dashLabel.setAttribute("x", W-PAD_R);
+  dashLabel.setAttribute("y", retailY - 5);
+  dashLabel.setAttribute("text-anchor", "end");
+  dashLabel.setAttribute("font-family", "Plus Jakarta Sans, Noto Sans KR, sans-serif");
+  dashLabel.setAttribute("font-size", "10");
+  dashLabel.setAttribute("font-weight", "700");
+  dashLabel.setAttribute("fill", "#9A6410");
+  dashLabel.textContent = "발매가 " + formatMoney(found.retail);
+  svg.appendChild(dashLabel);
+
+  // 영역 채우기
+  let areaPath = "M " + x(0) + " " + y(history[0]);
+  history.forEach((v,i) => { if(i>0) areaPath += " L " + x(i) + " " + y(v); });
+  areaPath += " L " + x(history.length-1) + " " + (H-PAD_B) + " L " + x(0) + " " + (H-PAD_B) + " Z";
+  const area = document.createElementNS(ns, "path");
+  area.setAttribute("d", areaPath);
+  const defs = document.createElementNS(ns, "defs");
+  const grad = document.createElementNS(ns, "linearGradient");
+  grad.setAttribute("id", "areaFade");
+  grad.setAttribute("x1", "0"); grad.setAttribute("y1", "0");
+  grad.setAttribute("x2", "0"); grad.setAttribute("y2", "1");
+  [["0","0.22"],["1","0"]].forEach(([off, op]) => {
+    const stop = document.createElementNS(ns, "stop");
+    stop.setAttribute("offset", off);
+    stop.setAttribute("stop-color", "#14213D");
+    stop.setAttribute("stop-opacity", op);
+    grad.appendChild(stop);
+  });
+  defs.appendChild(grad);
+  svg.insertBefore(defs, svg.firstChild);
+  area.setAttribute("fill", "url(#areaFade)");
+  svg.appendChild(area);
+
+  // 시세 라인
+  let linePath = "M " + x(0) + " " + y(history[0]);
+  history.forEach((v,i) => { if(i>0) linePath += " L " + x(i) + " " + y(v); });
+  const line = document.createElementNS(ns, "path");
+  line.setAttribute("d", linePath);
+  line.setAttribute("fill", "none");
+  line.setAttribute("stroke", "#14213D");
+  line.setAttribute("stroke-width", "2");
+  line.setAttribute("stroke-linejoin", "round");
+  line.setAttribute("stroke-linecap", "round");
+  svg.appendChild(line);
+
+  // 현재가 마커
+  const lastX = x(history.length-1), lastY = y(history[history.length-1]);
+  const dot = document.createElementNS(ns, "circle");
+  dot.setAttribute("cx", lastX); dot.setAttribute("cy", lastY);
+  dot.setAttribute("r", "4.5");
+  dot.setAttribute("fill", "#E5304A");
+  dot.setAttribute("stroke", "#FFFFFF");
+  dot.setAttribute("stroke-width", "2");
+  svg.appendChild(dot);
+}
+
+function buildStatus(discontinued){
+  const wrap = document.getElementById("r-status");
+  wrap.innerHTML = "";
+  const pill = document.createElement("div");
+  pill.className = "status-pill " + (discontinued ? "retired" : "active");
+  pill.textContent = discontinued ? "단종됨" : "생산중";
+  wrap.appendChild(pill);
+}
+
+function buildGauge(low, avg, high){
+  const studs = document.getElementById("studs");
+  studs.innerHTML = "";
+  const N = 12;
+  const avgPos = Math.round(((avg - low) / (high - low)) * (N - 1));
+
+  // 평균 라벨은 grid 1행의 해당 열에 배치 (겹치지 않아요)
+  const m = document.createElement("div");
+  m.className = "marker";
+  m.style.gridColumn = String(avgPos + 1);
+  m.innerHTML = "<span>평균</span>";
+  studs.appendChild(m);
+
+  for(let i = 0; i < N; i++){
+    const s = document.createElement("div");
+    s.className = "stud" + (i <= avgPos ? " filled" : "");
+    s.style.gridColumn = String(i + 1);
+    s.innerHTML = "<i></i><b></b>";
+    studs.appendChild(s);
+  }
+}
+
+function runSearch(){
+  const q = document.getElementById("q").value.trim().toLowerCase();
+  const result = document.getElementById("result");
+  const empty = document.getElementById("empty");
+  if(!q){ result.classList.remove("show"); empty.classList.remove("show"); return; }
+
+  const found = DATA.find(d => d.num === q || d.name.toLowerCase().includes(q));
+
+  if(!found){
+    result.classList.remove("show");
+    empty.classList.add("show");
+    return;
+  }
+  empty.classList.remove("show");
+  current = found;
+  renderResult(found);
+  addToRecent(found.num);
+}
+
+function enterApp(query){
+  document.getElementById("landing").classList.add("hide");
+  document.getElementById("app").classList.remove("hide");
+  document.getElementById("q").value = query;
+  runSearch();
+  window.scrollTo(0,0);
+}
+
+document.getElementById("landing-form").addEventListener("submit", e => {
+  e.preventDefault();
+  const q = document.getElementById("q-landing").value.trim();
+  if(!q) return;
+  enterApp(q);
+});
+
+document.getElementById("mini-form").addEventListener("submit", e => {
+  e.preventDefault();
+  runSearch();
+});
+
+document.getElementById("brand-home").addEventListener("click", () => {
+  document.getElementById("app").classList.add("hide");
+  document.getElementById("landing").classList.remove("hide");
+  document.getElementById("q-landing").value = "";
+  document.getElementById("q-landing").focus();
+});
+</script>
+</body>
+</html>
